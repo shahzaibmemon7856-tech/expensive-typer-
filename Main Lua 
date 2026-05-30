@@ -381,30 +381,115 @@ end
 
 local function showAboutDialog()
     local dlg = LuaDialog(service)
-    dlg.setTitle("About expensive typer v1.2")
+    dlg.setTitle("About Expensive Typer v2.0")
     local scroll = ScrollView(service)
     local inner = LinearLayout(service)
     inner.setOrientation(1)
     inner.setPadding(30,30,30,20)
-    local title = TextView(service); title.setText("expensive typer v1.2"); title.setTextSize(22); title.setTextColor(0xFFFF9800); title.setGravity(1); inner.addView(title)
-    local dev1 = TextView(service); dev1.setText("Bridge tech"); dev1.setTextSize(14); dev1.setGravity(1); dev1.setTextColor(0xFFAAAAAA); inner.addView(dev1)
-    local dev2 = TextView(service); dev2.setText("Created by Ch AbdulRafay"); dev2.setTextSize(14); dev2.setGravity(1); dev2.setTextColor(0xFFCCCCCC); dev2.setPadding(0,0,0,20); inner.addView(dev2)
-    local desc = TextView(service); desc.setText([[Expensive Typer combines voice recognition, custom dictionary, and AI processing using OpenRouter or Groq.
-Features:
-• 150+ speech languages
-• Custom word replacement dictionary
-• OpenRouter: Translation (10 languages) & Emoji insertion
-• Groq: Conversion Mode (Urdu/Hindi mixed script) & Intelligent Writer Mode
-• Easy settings and about dialog with contact links]]); desc.setTextSize(14); desc.setTextColor(0xFFFFFFFF); desc.setPadding(0,0,0,20); inner.addView(desc)
+    
+    -- First heading: Expensive Typer Version 2.0
+    local title = TextView(service)
+    title.setText("Expensive Typer Version 2.0")
+    title.setTextSize(22)
+    title.setTextColor(0xFFFF9800)
+    title.setGravity(1)
+    inner.addView(title)
+    
+    -- Second line: Developed by Bridge tech.
+    local devBridge = TextView(service)
+    devBridge.setText("Developed by Bridge tech.")
+    devBridge.setTextSize(16)
+    devBridge.setGravity(1)
+    devBridge.setTextColor(0xFFCCCCCC)
+    devBridge.setPadding(0,5,0,0)
+    inner.addView(devBridge)
+    
+    -- Third line: Created by ch Abdur Rafay
+    local creator = TextView(service)
+    creator.setText("Created by ch Abdur Rafay")
+    creator.setTextSize(14)
+    creator.setGravity(1)
+    creator.setTextColor(0xFFAAAAAA)
+    creator.setPadding(0,0,0,20)
+    inner.addView(creator)
+    
+    -- Long description
+    local longDesc = TextView(service)
+    longDesc.setText([[Expensive Typer is a powerful voice typing application with AI integration. It combines advanced speech recognition, custom word replacement dictionary, and intelligent AI processing through OpenRouter or Groq APIs.
+
+🌟 Key Features:
+• Supports 150+ speech recognition languages
+• Custom dictionary for word replacement
+• AI-powered text correction and enhancement
+• Real-time translation to multiple languages
+• Emoji insertion based on context
+• Dual AI engines (OpenRouter & Groq)
+• Special modes: Mixed Script Conversion & Intelligent Writer
+
+This tool is designed for accessibility, speed, and accuracy. Whether you need to dictate emails, write documents, or translate content on the fly, Expensive Typer provides a seamless experience.
+
+For feedback, suggestions, or support, please contact us through the options below.]])
+    longDesc.setTextSize(14)
+    longDesc.setTextColor(0xFFFFFFFF)
+    longDesc.setPadding(0,0,0,20)
+    inner.addView(longDesc)
+    
+    -- Contact Us heading
+    local contactHeading = TextView(service)
+    contactHeading.setText("📞 Contact Us")
+    contactHeading.setTextSize(18)
+    contactHeading.setTextColor(0xFFFF9800)
+    contactHeading.setPadding(0,10,0,10)
+    inner.addView(contactHeading)
+    
     local function addButton(text, url)
-        local btn = Button(service); btn.setText(text); btn.setTextSize(14); btn.setLayoutParams(LinearLayout.LayoutParams(-1,-2)); btn.setPadding(0,10,0,10); btn.onClick=function() service.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) end; inner.addView(btn)
-        local lp = btn.getLayoutParams(); lp.bottomMargin=10; btn.setLayoutParams(lp)
+        local btn = Button(service)
+        btn.setText(text)
+        btn.setTextSize(14)
+        btn.setLayoutParams(LinearLayout.LayoutParams(-1,-2))
+        btn.setPadding(0,10,0,10)
+        btn.onClick = function()
+            service.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        end
+        inner.addView(btn)
+        local lp = btn.getLayoutParams()
+        lp.bottomMargin = 10
+        btn.setLayoutParams(lp)
     end
+    
+    -- Existing buttons
     addButton("WhatsApp Channel", "https://whatsapp.com/channel/0029VbCJfWSAojYuaMuB9E1t")
     addButton("WhatsApp Community", "https://chat.whatsapp.com/C5jA2u0gGDO9rkgcCY2ybg")
     addButton("YouTube Channel", "https://youtube.com/@csr-official-f5v?si=nwBIaiiFoI8Ix8k5")
-    local feedbackBtn = Button(service); feedbackBtn.setText("Send Feedback (WhatsApp)"); feedbackBtn.setTextSize(14); feedbackBtn.setPadding(0,10,0,10); feedbackBtn.onClick=function() service.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/923057040811?text=Hello%20Expensive%20Typer"))) end; inner.addView(feedbackBtn); feedbackBtn.getLayoutParams().bottomMargin=10
-    local closeBtn = Button(service); closeBtn.setText("Close"); closeBtn.onClick=function() dlg.dismiss() end; inner.addView(closeBtn)
+    
+    local feedbackBtn = Button(service)
+    feedbackBtn.setText("Send Feedback (WhatsApp)")
+    feedbackBtn.setTextSize(14)
+    feedbackBtn.setPadding(0,10,0,10)
+    feedbackBtn.onClick = function()
+        service.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/923057040811?text=Hello%20Expensive%20Typer")))
+    end
+    inner.addView(feedbackBtn)
+    feedbackBtn.getLayoutParams().bottomMargin = 10
+    
+    -- New button: Gaming Club WhatsApp Community
+    local gamingClubBtn = Button(service)
+    gamingClubBtn.setText("Gaming Club WhatsApp Community")
+    gamingClubBtn.setTextSize(14)
+    gamingClubBtn.setPadding(0,10,0,10)
+    gamingClubBtn.onClick = function()
+        service.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://chat.whatsapp.com/Fsxp8fw3iM0KbzTPee9yRb")))
+    end
+    inner.addView(gamingClubBtn)
+    gamingClubBtn.getLayoutParams().bottomMargin = 10
+    
+    local closeBtn = Button(service)
+    closeBtn.setText("Close")
+    closeBtn.onClick = function()
+        dlg.dismiss()
+    end
+    inner.addView(closeBtn)
+    
     scroll.addView(inner)
     dlg.setView(scroll)
     dlg.show()
@@ -452,7 +537,7 @@ end
 
 local function showMainDialog()
     local dlg = LuaDialog(service)
-    dlg.setTitle("expensive typer v1.2")
+    dlg.setTitle("Expensive Typer v2.0")
     local translationEnabled = isTranslationEnabled()
     local emojiEnabled = isEmojiEnabled()
     local provider = getAIProvider()
@@ -461,7 +546,7 @@ local function showMainDialog()
     local selectedIndex = (provider == "openrouter") and 0 or 1
     local layout = {
         LinearLayout; orientation="vertical"; padding="20dp";
-        { TextView; text="Bridge tech"; textSize="16sp"; gravity="center"; layout_marginBottom="15dp"; textColor="#FF9800"; };
+        { TextView; text="Developed by Bridge tech."; textSize="16sp"; gravity="center"; layout_marginBottom="15dp"; textColor="#FF9800"; };
         { Button; text="Select Language For Typing"; onClick=function()
             local listDlg = LuaDialog(service); listDlg.setTitle("Select Language")
             local list = ListView(service)
