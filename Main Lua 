@@ -23,12 +23,17 @@ local function setAIProvider(provider)
     editor.commit()
 end
 
+-- OpenRouter models (Gemini models included)
 local OPENROUTER_MODELS = {
     "google/gemini-2.0-flash-001",
+    "google/gemini-2.0-pro-exp",
     "meta-llama/llama-3.3-70b-instruct",
+    "meta-llama/llama-3.1-8b-instruct",
     "microsoft/phi-3-mini-128k",
     "anthropic/claude-3-haiku",
-    "mistralai/mistral-7b-instruct"
+    "mistralai/mistral-7b-instruct",
+    "openai/gpt-3.5-turbo",
+    "cohere/command-r-plus"
 }
 local function getOpenRouterApiKey()
     return prefs.getString("openrouter_apiKey", "")
@@ -43,6 +48,95 @@ end
 local function saveOpenRouterModel(model)
     editor.putString("openrouter_model", model)
     editor.commit()
+end
+
+-- AS Studio Crack Model
+local ASSTUDIO_MODELS = {
+    "crack-model-v1",
+    "crack-model-v2"
+}
+local function getAsStudioApiKey()
+    return prefs.getString("asstudio_apiKey", "")
+end
+local function saveAsStudioApiKey(key)
+    editor.putString("asstudio_apiKey", key)
+    editor.commit()
+end
+local function getAsStudioModel()
+    return prefs.getString("asstudio_model", "crack-model-v1")
+end
+local function saveAsStudioModel(model)
+    editor.putString("asstudio_model", model)
+    editor.commit()
+end
+
+-- Gemini API (Direct)
+local GEMINI_MODELS = {
+    "gemini-pro",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash"
+}
+local function getGeminiApiKey()
+    return prefs.getString("gemini_apiKey", "")
+end
+local function saveGeminiApiKey(key)
+    editor.putString("gemini_apiKey", key)
+    editor.commit()
+end
+local function getGeminiModel()
+    return prefs.getString("gemini_model", "gemini-pro")
+end
+local function saveGeminiModel(model)
+    editor.putString("gemini_model", model)
+    editor.commit()
+end
+
+local function callGeminiAPI(apiKey, model, prompt, callback)
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/"..model..":generateContent?key="..apiKey
+    local payload = {
+        contents = {
+            {
+                parts = {
+                    { text = prompt }
+                }
+            }
+        },
+        generationConfig = {
+            temperature = 0.7,
+            maxOutputTokens = 1024
+        }
+    }
+    Http.post(url, cjson.encode(payload), {
+        ["Content-Type"]="application/json"
+    }, function(status, data)
+        if status == 200 then
+            local ok, res = pcall(cjson.decode, data)
+            if ok and res and res.candidates and #res.candidates > 0 then
+                local text = res.candidates[1].content.parts[1].text
+                callback(text, nil)
+            else
+                callback(nil, "Invalid response")
+            end
+        else
+            callback(nil, "HTTP "..tostring(status))
+        end
+    end)
+end
+
+local function testGeminiAPI(apiKey, model, callback)
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/"..model..":generateContent?key="..apiKey
+    local payload = { contents = { { parts = { { text = "Test" } } } } }
+    Http.post(url, cjson.encode(payload), {["Content-Type"]="application/json"}, function(status, data)
+        if status == 200 then callback(true, "Valid")
+        else callback(false, "Invalid") end
+    end)
+end
+
+-- Dummy call for AS Studio (demo only)
+local function callAsStudioAPI(apiKey, model, prompt, callback)
+    service.speak("AS Studio API is not implemented yet. Using demo mode.")
+    local dummyResponse = "[AS Studio Crack Model Response]: " .. prompt:sub(1, 100)
+    callback(dummyResponse, nil)
 end
 
 local TRANSLATION_LANGUAGES = {"English","Urdu","Hindi","Arabic","Spanish","French","German","Turkish","Russian","Chinese"}
@@ -77,12 +171,15 @@ local function setEmojiEnabled(enabled)
     editor.commit()
 end
 
+-- Groq models
 local GROQ_MODELS = {
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
     "mixtral-8x7b-32768",
     "gemma2-9b-it",
-    "llama-guard-3-8b"
+    "llama-guard-3-8b",
+    "gemma-7b-it",
+    "llama3-70b-8192"
 }
 local function getGroqApiKey()
     return prefs.getString("groq_apiKey", "")
@@ -159,22 +256,59 @@ local function processWithAI(spokenText, callback)
     local provider = getAIProvider()
     if provider == "openrouter" then
         local apiKey = getOpenRouterApiKey()
-        if apiKey == "" then service.speak("Set OpenRouter API key in AI Settings"); callback(spokenText); return end
+        if apiKey == "" then service.speak("Set OpenRouter API key in Settings"); callback(spokenText); return end
         local model = getOpenRouterModel()
         local translation = isTranslationEnabled()
         local emoji = isEmojiEnabled()
         local prompt
-        if translation then
-            prompt = "Fix spelling mistakes (Urdu/English), add punctuation. Translate entire text to "..getTargetLanguageName()..". No emojis. Return only translated text.\nText: "..spokenText
+        if translation and emoji then
+            prompt = "Fix spelling mistakes, add punctuation. Translate the entire text to "..getTargetLanguageName()..". After each sentence, add ONE relevant emoji. Return only translated text with emojis. Do not output original text.\nText: "..spokenText
+        elseif translation then
+            prompt = "Fix spelling mistakes, add punctuation. Translate the entire text to "..getTargetLanguageName()..". No emojis. Return only translated text. Do not output original text.\nText: "..spokenText
         elseif emoji then
             prompt = "Fix spelling mistakes, add punctuation. After each sentence add ONE relevant emoji. Return only text with emojis.\nText: "..spokenText
         else
             prompt = "Fix spelling mistakes, add punctuation. No emojis. Return only corrected text.\nText: "..spokenText
         end
         callOpenRouterAPI(apiKey, model, prompt, callback)
-    else
+    elseif provider == "asstudio" then
+        local apiKey = getAsStudioApiKey()
+        if apiKey == "" then service.speak("Set AS Studio API key in Settings (demo)"); callback(spokenText); return end
+        local model = getAsStudioModel()
+        local translation = isTranslationEnabled()
+        local emoji = isEmojiEnabled()
+        local prompt
+        if translation and emoji then
+            prompt = "Fix spelling, translate to "..getTargetLanguageName().." and add emojis after each sentence."
+        elseif translation then
+            prompt = "Fix spelling, translate to "..getTargetLanguageName()..". No emojis."
+        elseif emoji then
+            prompt = "Fix spelling, add emojis after each sentence."
+        else
+            prompt = "Fix spelling and punctuation."
+        end
+        prompt = prompt .. "\nText: " .. spokenText
+        callAsStudioAPI(apiKey, model, prompt, callback)
+    elseif provider == "gemini" then
+        local apiKey = getGeminiApiKey()
+        if apiKey == "" then service.speak("Set Gemini API key in Settings"); callback(spokenText); return end
+        local model = getGeminiModel()
+        local translation = isTranslationEnabled()
+        local emoji = isEmojiEnabled()
+        local prompt
+        if translation and emoji then
+            prompt = "Fix spelling mistakes, add punctuation. Translate the entire text to "..getTargetLanguageName()..". After each sentence, add ONE relevant emoji. Return only translated text with emojis. Do not output original text.\nText: "..spokenText
+        elseif translation then
+            prompt = "Fix spelling mistakes, add punctuation. Translate the entire text to "..getTargetLanguageName()..". No emojis. Return only translated text. Do not output original text.\nText: "..spokenText
+        elseif emoji then
+            prompt = "Fix spelling mistakes, add punctuation. After each sentence add ONE relevant emoji. Return only text with emojis.\nText: "..spokenText
+        else
+            prompt = "Fix spelling mistakes, add punctuation. No emojis. Return only corrected text.\nText: "..spokenText
+        end
+        callGeminiAPI(apiKey, model, prompt, callback)
+    else -- groq
         local apiKey = getGroqApiKey()
-        if apiKey == "" then service.speak("Set Groq API key in AI Settings"); callback(spokenText); return end
+        if apiKey == "" then service.speak("Set Groq API key in Settings"); callback(spokenText); return end
         local model = getGroqModel()
         local mode = getGroqMode()
         local systemPrompt = ""
@@ -278,104 +412,211 @@ local function showTranslationLanguagesDialog()
     dlg.show()
 end
 
+-- Groq Modes Dialog (now called from Settings)
 local function showGroqModesDialog(parentDlg)
     local dlg = LuaDialog(service)
     dlg.setTitle("Groq Mode")
+    local currentMode = getGroqMode()
     local layout = {
         LinearLayout; orientation="vertical"; padding="30dp";
-        { Button; text="Conversion Mode (Mix Language)"; onClick=function() setGroqMode("conversion"); service.speak("Conversion Mode"); dlg.dismiss(); if parentDlg then parentDlg.show() end end; layout_marginBottom="15dp"; };
-        { Button; text="Intelligent Writer Mode (Enhancement)"; onClick=function() setGroqMode("intelligent"); service.speak("Intelligent Mode"); dlg.dismiss(); if parentDlg then parentDlg.show() end end; layout_marginBottom="15dp"; };
-        { Button; text="← Back"; onClick=function() dlg.dismiss(); if parentDlg then parentDlg.show() end end; };
+        { RadioGroup; id="modeGroup";
+            { RadioButton; id="convMode"; text="Conversion Mode (Mix Language)"; };
+            { RadioButton; id="intelMode"; text="Intelligent Writer Mode (Enhancement)"; };
+        };
+        { Button; text="Save"; onClick=function()
+            local mode = modeGroup.getCheckedRadioButtonId()
+            if mode == convMode.getId() then
+                setGroqMode("conversion")
+                service.speak("Conversion Mode selected")
+            elseif mode == intelMode.getId() then
+                setGroqMode("intelligent")
+                service.speak("Intelligent Mode selected")
+            end
+            dlg.dismiss()
+            if parentDlg then parentDlg.show() end
+        end; layout_marginTop="15dp"; };
+        { Button; text="Back"; onClick=function() dlg.dismiss(); if parentDlg then parentDlg.show() end end; layout_marginTop="10dp"; };
     }
-    dlg.setView(loadlayout(layout))
+    local view = loadlayout(layout)
+    if currentMode == "conversion" then convMode.setChecked(true) else intelMode.setChecked(true) end
+    dlg.setView(view)
     dlg.show()
 end
 
-local function showAISettingsDialog(mainDlg)
+-- Unified Settings Dialog (contains AI Provider, API keys, models, Groq Modes)
+local function showSettingsDialog(mainDlg)
     local dlg = LuaDialog(service)
-    dlg.setTitle("AI Engine Settings")
-    local provider = getAIProvider()
-    if provider == "openrouter" then
-        local layout = {
-            LinearLayout; orientation="vertical"; padding="20dp";
-            { TextView; text="OpenRouter API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
-            { EditText; id="keyInput"; hint="Enter API Key"; text=getOpenRouterApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
-            { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
-            { Spinner; id="modelSpinner"; layout_width="fill"; layout_marginBottom="15dp"; };
-            { LinearLayout; orientation="horizontal";
-                { Button; id="testBtn"; text="TEST"; layout_width="0dp"; layout_weight="1"; layout_marginRight="5dp"; };
-                { Button; id="saveBtn"; text="SAVE"; layout_width="0dp"; layout_weight="1"; layout_marginLeft="5dp"; layout_marginRight="5dp"; };
-                { Button; id="backBtn"; text="BACK"; layout_width="0dp"; layout_weight="1"; layout_marginLeft="5dp"; };
-            };
-        }
-        local view = loadlayout(layout)
-        local adapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, OPENROUTER_MODELS)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        modelSpinner.setAdapter(adapter)
-        for i,m in ipairs(OPENROUTER_MODELS) do if m==getOpenRouterModel() then modelSpinner.setSelection(i-1) break end end
-        testBtn.onClick = function()
-            local key = keyInput.getText().toString()
-            if key=="" then service.speak("Enter API key"); return end
-            testBtn.setText("Testing...")
-            testBtn.setEnabled(false)
-            testOpenRouterAPI(key, OPENROUTER_MODELS[modelSpinner.getSelectedItemPosition()+1], function(succ,msg)
-                testBtn.setText("TEST")
-                testBtn.setEnabled(true)
-                service.speak(succ and "Valid key" or "Invalid")
-            end)
+    dlg.setTitle("Settings")
+    local providerItems = {"OpenRouter", "Groq", "AS Studio Crack", "Gemini"}
+    local providerValues = {"openrouter", "groq", "asstudio", "gemini"}
+    local currentProvider = getAIProvider()
+    local selectedIdx = 0
+    for i,v in ipairs(providerValues) do if v == currentProvider then selectedIdx = i-1 break end end
+    
+    -- Dynamic layout container
+    local layout = {
+        LinearLayout; orientation="vertical"; padding="20dp";
+        { TextView; text="AI Provider:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+        { Spinner; id="providerSpinner"; layout_width="fill"; layout_marginBottom="15dp"; };
+        { LinearLayout; id="dynamicArea"; orientation="vertical"; layout_width="fill"; };
+        { Button; text="Groq Modes"; id="groqModesBtn"; layout_width="fill"; layout_marginTop="10dp"; layout_marginBottom="10dp"; };
+        { Button; text="Save & Close"; id="saveCloseBtn"; layout_width="fill"; layout_marginTop="10dp"; };
+        { Button; text="Back to Main"; id="backBtn"; layout_width="fill"; layout_marginTop="5dp"; };
+    }
+    local view = loadlayout(layout)
+    
+    -- Provider spinner adapter
+    local providerAdapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, providerItems)
+    providerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+    providerSpinner.setAdapter(providerAdapter)
+    providerSpinner.setSelection(selectedIdx)
+    
+    -- Function to rebuild dynamic area based on selected provider
+    local function rebuildDynamicArea(provider)
+        dynamicArea.removeAllViews()
+        if provider == "openrouter" then
+            local inner = loadlayout({
+                LinearLayout; orientation="vertical"; layout_width="fill";
+                { TextView; text="OpenRouter API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { EditText; id="orKey"; hint="Enter API Key"; text=getOpenRouterApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { Spinner; id="orModel"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { Button; text="Test API Key"; id="orTestBtn"; layout_width="fill"; };
+            })
+            dynamicArea.addView(inner)
+            local modelAdapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, OPENROUTER_MODELS)
+            modelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            orModel.setAdapter(modelAdapter)
+            for i,m in ipairs(OPENROUTER_MODELS) do if m==getOpenRouterModel() then orModel.setSelection(i-1) break end end
+            orTestBtn.onClick = function()
+                local key = orKey.getText().toString()
+                if key=="" then service.speak("Enter API key"); return end
+                orTestBtn.setText("Testing...")
+                orTestBtn.setEnabled(false)
+                testOpenRouterAPI(key, OPENROUTER_MODELS[orModel.getSelectedItemPosition()+1], function(succ,msg)
+                    orTestBtn.setText("Test API Key")
+                    orTestBtn.setEnabled(true)
+                    service.speak(succ and "Valid key" or "Invalid")
+                end)
+            end
+        elseif provider == "groq" then
+            local inner = loadlayout({
+                LinearLayout; orientation="vertical"; layout_width="fill";
+                { TextView; text="Groq API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { EditText; id="gKey"; hint="Enter API Key"; text=getGroqApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { Spinner; id="gModel"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { Button; text="Test API Key"; id="gTestBtn"; layout_width="fill"; };
+            })
+            dynamicArea.addView(inner)
+            local modelAdapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, GROQ_MODELS)
+            modelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            gModel.setAdapter(modelAdapter)
+            for i,m in ipairs(GROQ_MODELS) do if m==getGroqModel() then gModel.setSelection(i-1) break end end
+            gTestBtn.onClick = function()
+                local key = gKey.getText().toString()
+                if key=="" then service.speak("Enter API key"); return end
+                gTestBtn.setText("Testing...")
+                gTestBtn.setEnabled(false)
+                testGroqAPI(key, GROQ_MODELS[gModel.getSelectedItemPosition()+1], function(succ,msg)
+                    gTestBtn.setText("Test API Key")
+                    gTestBtn.setEnabled(true)
+                    service.speak(succ and "Valid key" or "Invalid")
+                end)
+            end
+        elseif provider == "asstudio" then
+            local inner = loadlayout({
+                LinearLayout; orientation="vertical"; layout_width="fill";
+                { TextView; text="AS Studio Crack API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { EditText; id="asKey"; hint="Enter Demo Key (any)"; text=getAsStudioApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { Spinner; id="asModel"; layout_width="fill"; layout_marginBottom="10dp"; };
+            })
+            dynamicArea.addView(inner)
+            local modelAdapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, ASSTUDIO_MODELS)
+            modelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            asModel.setAdapter(modelAdapter)
+            for i,m in ipairs(ASSTUDIO_MODELS) do if m==getAsStudioModel() then asModel.setSelection(i-1) break end end
+        elseif provider == "gemini" then
+            local inner = loadlayout({
+                LinearLayout; orientation="vertical"; layout_width="fill";
+                { TextView; text="Gemini API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { EditText; id="gemKey"; hint="Enter API Key"; text=getGeminiApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
+                { Spinner; id="gemModel"; layout_width="fill"; layout_marginBottom="10dp"; };
+                { Button; text="Test API Key"; id="gemTestBtn"; layout_width="fill"; };
+            })
+            dynamicArea.addView(inner)
+            local modelAdapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, GEMINI_MODELS)
+            modelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            gemModel.setAdapter(modelAdapter)
+            for i,m in ipairs(GEMINI_MODELS) do if m==getGeminiModel() then gemModel.setSelection(i-1) break end end
+            gemTestBtn.onClick = function()
+                local key = gemKey.getText().toString()
+                if key=="" then service.speak("Enter API key"); return end
+                gemTestBtn.setText("Testing...")
+                gemTestBtn.setEnabled(false)
+                testGeminiAPI(key, GEMINI_MODELS[gemModel.getSelectedItemPosition()+1], function(succ,msg)
+                    gemTestBtn.setText("Test API Key")
+                    gemTestBtn.setEnabled(true)
+                    service.speak(succ and "Valid key" or "Invalid")
+                end)
+            end
         end
-        saveBtn.onClick = function()
-            local key = keyInput.getText().toString()
-            if key~="" then saveOpenRouterApiKey(key) end
-            local model = OPENROUTER_MODELS[modelSpinner.getSelectedItemPosition()+1]
-            saveOpenRouterModel(model)
-            service.speak("OpenRouter settings saved")
-            dlg.dismiss()
-            if mainDlg then mainDlg.show() end
-        end
-        backBtn.onClick = function() dlg.dismiss(); if mainDlg then mainDlg.show() end end
-        dlg.setView(view)
-    else
-        local layout = {
-            LinearLayout; orientation="vertical"; padding="20dp";
-            { TextView; text="Groq API Key:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
-            { EditText; id="keyInput"; hint="Enter API Key"; text=getGroqApiKey(); textSize="14sp"; layout_width="fill"; layout_marginBottom="10dp"; };
-            { TextView; text="Model:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
-            { Spinner; id="modelSpinner"; layout_width="fill"; layout_marginBottom="15dp"; };
-            { LinearLayout; orientation="horizontal";
-                { Button; id="testBtn"; text="TEST"; layout_width="0dp"; layout_weight="1"; layout_marginRight="5dp"; };
-                { Button; id="saveBtn"; text="SAVE"; layout_width="0dp"; layout_weight="1"; layout_marginLeft="5dp"; layout_marginRight="5dp"; };
-                { Button; id="backBtn"; text="BACK"; layout_width="0dp"; layout_weight="1"; layout_marginLeft="5dp"; };
-            };
-        }
-        local view = loadlayout(layout)
-        local adapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, GROQ_MODELS)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        modelSpinner.setAdapter(adapter)
-        for i,m in ipairs(GROQ_MODELS) do if m==getGroqModel() then modelSpinner.setSelection(i-1) break end end
-        testBtn.onClick = function()
-            local key = keyInput.getText().toString()
-            if key=="" then service.speak("Enter API key"); return end
-            testBtn.setText("Testing...")
-            testBtn.setEnabled(false)
-            testGroqAPI(key, GROQ_MODELS[modelSpinner.getSelectedItemPosition()+1], function(succ,msg)
-                testBtn.setText("TEST")
-                testBtn.setEnabled(true)
-                service.speak(succ and "Valid key" or "Invalid")
-            end)
-        end
-        saveBtn.onClick = function()
-            local key = keyInput.getText().toString()
-            if key~="" then saveGroqApiKey(key) end
-            local model = GROQ_MODELS[modelSpinner.getSelectedItemPosition()+1]
-            saveGroqModel(model)
-            service.speak("Groq settings saved")
-            dlg.dismiss()
-            if mainDlg then mainDlg.show() end
-        end
-        backBtn.onClick = function() dlg.dismiss(); if mainDlg then mainDlg.show() end end
-        dlg.setView(view)
     end
+    
+    -- Initial build
+    rebuildDynamicArea(currentProvider)
+    
+    -- Provider change listener
+    providerSpinner.onItemSelected = function(parent, view, position, id)
+        local newProvider = providerValues[position+1]
+        rebuildDynamicArea(newProvider)
+    end
+    
+    -- Groq Modes button (only relevant for Groq, but we show always; user can click)
+    groqModesBtn.onClick = function()
+        dlg.dismiss()
+        showGroqModesDialog(dlg)
+    end
+    
+    -- Save & Close button
+    saveCloseBtn.onClick = function()
+        local selectedProvider = providerValues[providerSpinner.getSelectedItemPosition()+1]
+        setAIProvider(selectedProvider)
+        -- Save based on current visible fields
+        if selectedProvider == "openrouter" then
+            local key = orKey.getText().toString()
+            if key~="" then saveOpenRouterApiKey(key) end
+            local model = OPENROUTER_MODELS[orModel.getSelectedItemPosition()+1]
+            saveOpenRouterModel(model)
+        elseif selectedProvider == "groq" then
+            local key = gKey.getText().toString()
+            if key~="" then saveGroqApiKey(key) end
+            local model = GROQ_MODELS[gModel.getSelectedItemPosition()+1]
+            saveGroqModel(model)
+        elseif selectedProvider == "asstudio" then
+            local key = asKey.getText().toString()
+            if key~="" then saveAsStudioApiKey(key) end
+            local model = ASSTUDIO_MODELS[asModel.getSelectedItemPosition()+1]
+            saveAsStudioModel(model)
+        elseif selectedProvider == "gemini" then
+            local key = gemKey.getText().toString()
+            if key~="" then saveGeminiApiKey(key) end
+            local model = GEMINI_MODELS[gemModel.getSelectedItemPosition()+1]
+            saveGeminiModel(model)
+        end
+        service.speak("Settings saved")
+        dlg.dismiss()
+        if mainDlg then mainDlg.show() end
+    end
+    
+    backBtn.onClick = function()
+        dlg.dismiss()
+        if mainDlg then mainDlg.show() end
+    end
+    
+    dlg.setView(view)
     dlg.show()
 end
 
@@ -387,7 +628,6 @@ local function showAboutDialog()
     inner.setOrientation(1)
     inner.setPadding(30,30,30,20)
     
-    -- First heading: Expensive Typer Version 2.0
     local title = TextView(service)
     title.setText("Expensive Typer Version 2.0")
     title.setTextSize(22)
@@ -395,7 +635,6 @@ local function showAboutDialog()
     title.setGravity(1)
     inner.addView(title)
     
-    -- Second line: Developed by Bridge tech.
     local devBridge = TextView(service)
     devBridge.setText("Developed by Bridge tech.")
     devBridge.setTextSize(16)
@@ -404,7 +643,6 @@ local function showAboutDialog()
     devBridge.setPadding(0,5,0,0)
     inner.addView(devBridge)
     
-    -- Third line: Created by ch Abdur Rafay
     local creator = TextView(service)
     creator.setText("Created by ch Abdur Rafay")
     creator.setTextSize(14)
@@ -413,18 +651,17 @@ local function showAboutDialog()
     creator.setPadding(0,0,0,20)
     inner.addView(creator)
     
-    -- Long description
     local longDesc = TextView(service)
-    longDesc.setText([[Expensive Typer is a powerful voice typing application with AI integration. It combines advanced speech recognition, custom word replacement dictionary, and intelligent AI processing through OpenRouter or Groq APIs.
+    longDesc.setText([[Expensive Typer is a powerful voice typing application with AI integration. It combines advanced speech recognition, custom word replacement dictionary, and intelligent AI processing through OpenRouter, Groq, AS Studio Crack, or Gemini APIs.
 
-🌟 Key Features:
-• Supports 150+ speech recognition languages
-• Custom dictionary for word replacement
-• AI-powered text correction and enhancement
-• Real-time translation to multiple languages
-• Emoji insertion based on context
-• Dual AI engines (OpenRouter & Groq)
-• Special modes: Mixed Script Conversion & Intelligent Writer
+Key Features:
+- Supports 150+ speech recognition languages
+- Custom dictionary for word replacement
+- AI-powered text correction and enhancement
+- Real-time translation to multiple languages
+- Emoji insertion based on context
+- Multiple AI engines: OpenRouter, Groq, AS Studio Crack, Gemini
+- Special modes: Mixed Script Conversion & Intelligent Writer
 
 This tool is designed for accessibility, speed, and accuracy. Whether you need to dictate emails, write documents, or translate content on the fly, Expensive Typer provides a seamless experience.
 
@@ -434,9 +671,8 @@ For feedback, suggestions, or support, please contact us through the options bel
     longDesc.setPadding(0,0,0,20)
     inner.addView(longDesc)
     
-    -- Contact Us heading
     local contactHeading = TextView(service)
-    contactHeading.setText("📞 Contact Us")
+    contactHeading.setText("Contact Us")
     contactHeading.setTextSize(18)
     contactHeading.setTextColor(0xFFFF9800)
     contactHeading.setPadding(0,10,0,10)
@@ -457,7 +693,6 @@ For feedback, suggestions, or support, please contact us through the options bel
         btn.setLayoutParams(lp)
     end
     
-    -- Existing buttons
     addButton("WhatsApp Channel", "https://whatsapp.com/channel/0029VbCJfWSAojYuaMuB9E1t")
     addButton("WhatsApp Community", "https://chat.whatsapp.com/C5jA2u0gGDO9rkgcCY2ybg")
     addButton("YouTube Channel", "https://youtube.com/@csr-official-f5v?si=nwBIaiiFoI8Ix8k5")
@@ -472,7 +707,6 @@ For feedback, suggestions, or support, please contact us through the options bel
     inner.addView(feedbackBtn)
     feedbackBtn.getLayoutParams().bottomMargin = 10
     
-    -- New button: Gaming Club WhatsApp Community
     local gamingClubBtn = Button(service)
     gamingClubBtn.setText("Gaming Club WhatsApp Community")
     gamingClubBtn.setTextSize(14)
@@ -510,9 +744,14 @@ local function startVoiceTyping(langCode)
                 end
                 text = text:gsub("%s([?,!])", "%1")
                 if not text:match("[.?!,.]$") then text = text..". " end
-                local aiKeyOpen = getOpenRouterApiKey()
-                local aiKeyGroq = getGroqApiKey()
-                if (getAIProvider()=="openrouter" and aiKeyOpen~="") or (getAIProvider()=="groq" and aiKeyGroq~="") then
+                local provider = getAIProvider()
+                local hasKey = false
+                if provider=="openrouter" and getOpenRouterApiKey()~="" then hasKey=true
+                elseif provider=="groq" and getGroqApiKey()~="" then hasKey=true
+                elseif provider=="asstudio" and getAsStudioApiKey()~="" then hasKey=true
+                elseif provider=="gemini" and getGeminiApiKey()~="" then hasKey=true
+                end
+                if hasKey then
                     service.speak("AI processing...")
                     processWithAI(text, function(enhanced)
                         service.insertText(editText, enhanced)
@@ -535,15 +774,12 @@ local function startVoiceTyping(langCode)
     speechRec.startListening(intent)
 end
 
+-- Main Dialog (Simplified - AI settings moved to Settings)
 local function showMainDialog()
     local dlg = LuaDialog(service)
     dlg.setTitle("Expensive Typer v2.0")
     local translationEnabled = isTranslationEnabled()
     local emojiEnabled = isEmojiEnabled()
-    local provider = getAIProvider()
-    local providerItems = {"OpenRouter", "Groq"}
-    local providerValues = {"openrouter", "groq"}
-    local selectedIndex = (provider == "openrouter") and 0 or 1
     local layout = {
         LinearLayout; orientation="vertical"; padding="20dp";
         { TextView; text="Developed by Bridge tech."; textSize="16sp"; gravity="center"; layout_marginBottom="15dp"; textColor="#FF9800"; };
@@ -565,25 +801,11 @@ local function showMainDialog()
         { Button; id="emojiToggle"; text=emojiEnabled and "Emoji: ON" or "Emoji: OFF"; onClick=function()
             local new = not isEmojiEnabled(); setEmojiEnabled(new); emojiToggle.setText(new and "Emoji: ON" or "Emoji: OFF"); service.speak(new and "Emoji enabled" or "Emoji disabled")
         end; layout_width="fill"; layout_marginBottom="10dp"; };
-        { TextView; text="AI Provider:"; textSize="14sp"; textColor="#FFFFFFFF"; layout_marginBottom="5dp"; };
-        { Spinner; id="providerSpinner"; layout_width="fill"; layout_marginBottom="10dp"; };
-        { Button; text="Groq Modes"; onClick=function() dlg.dismiss(); showGroqModesDialog(dlg) end; layout_width="fill"; layout_marginBottom="10dp"; };
-        { Button; text="AI Engine Settings"; onClick=function() dlg.dismiss(); showAISettingsDialog(dlg) end; layout_width="fill"; layout_marginBottom="10dp"; };
+        { Button; text="Settings"; onClick=function() dlg.dismiss(); showSettingsDialog(dlg) end; layout_width="fill"; layout_marginBottom="10dp"; };
         { Button; text="About"; onClick=function() showAboutDialog() end; layout_width="fill"; layout_marginBottom="10dp"; };
         { Button; text="Exit"; onClick=function() dlg.dismiss() end; layout_width="fill"; };
     }
     local view = loadlayout(layout)
-    local adapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, providerItems)
-    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-    providerSpinner.setAdapter(adapter)
-    providerSpinner.setSelection(selectedIndex)
-    providerSpinner.onItemSelected = function(parent, view, position, id)
-        local newProvider = providerValues[position+1]
-        if newProvider ~= getAIProvider() then
-            setAIProvider(newProvider)
-            service.speak("AI Provider set to "..providerItems[position+1])
-        end
-    end
     dlg.setView(view)
     dlg.show()
 end
